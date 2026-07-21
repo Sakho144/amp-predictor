@@ -40,7 +40,7 @@ shap_explainer = load_shap_explainer()
 def load_reference_data():
     df = pd.read_csv("peptide_features_length_balanced.csv")
     sequences_ref = df["sequence"].tolist()
-    labels_ref = df["activity_label"].tolist()
+    labels_ref = df["activity_label_final"].tolist()
     return sequences_ref, labels_ref
 
 seq_ref, labels_ref = load_reference_data()
@@ -173,48 +173,44 @@ def get_confidence_level(identity_ratio):
 st.sidebar.title("🧬 AMP-Predictor")
 page = st.sidebar.radio("Navigation", ["🏠 Home", "🧪 Prediction", "📊 Performance"])
 
-# ---------- PAGE HOME (améliorée) ----------
+# ---------- PAGE HOME ----------
 if page == "🏠 Home":
     st.title("AMP-Predictor: Antimicrobial Peptide Activity Prediction")
     st.markdown("---")
 
-    # About section
     with st.expander("📖 About this tool", expanded=True):
         st.markdown("""
         **AMP-Predictor** is a machine learning web application that predicts whether a given peptide sequence has antimicrobial activity.  
         It is designed for researchers in microbiology, bioinformatics, and drug discovery who need to rapidly screen potential antimicrobial peptides (AMPs).
         """)
 
-    # How it works section
     with st.expander("⚙️ How it works", expanded=False):
         st.markdown("""
         - **Input**: Peptide sequence (5–50 amino acids, uppercase letters A–Y).  
         - **Descriptors**: 33 features including amino acid composition, length, net charge, hydrophobicity, and 10 global descriptors (MW, pI, aliphatic index, Boman index, etc.) computed with `modlAMP`.  
-        - **Model**: XGBoost classifier trained on a balanced dataset of 3,121 peptides (50% active, 50% inactive).  
+        - **Model**: XGBoost classifier trained on a length-bias-corrected, quality-filtered dataset of 2,830 peptides (1,415 active, 1,415 inactive).  
         - **Output**: Probability of being active (0–100%) and a binary prediction (Active/Inactive), plus a local SHAP explanation and similarity search.
         """)
 
-    # Key results
+    # Key results (blind test, 90/10 split model — reported in the article)
     st.subheader("📊 Model performance (blind test)")
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("AUC", "0.883")
-    col2.metric("F1-score", "0.809")
-    col3.metric("Accuracy", "0.815")
-    col4.metric("Precision", "0.837")
-    col5.metric("Recall", "0.783")
-    st.markdown("Blind test on 10% of the data (313 peptides never used during training).")
+    col1.metric("AUC", "0.802")
+    col2.metric("F1-score", "0.719")
+    col3.metric("Accuracy", "0.721")
+    col4.metric("Precision", "0.721")
+    col5.metric("Recall", "0.716")
+    st.markdown("Blind test on 10% of the data (283 peptides never used during training). The model deployed in this app is retrained on 100% of the dataset for maximal data usage; the metrics above come from the held-out evaluation reported in the article.")
 
-    # Limitations
     with st.expander("⚠️ Limitations", expanded=False):
         st.markdown("""
         - **Short peptides (<10 AA)**: Predictions are less reliable due to underrepresentation in the training set.  
         - **General activity only**: The model does not distinguish between Gram-positive, Gram-negative, or fungal targets.  
         - **No MIC prediction**: The model outputs only the probability of activity, not the minimal inhibitory concentration.  
-        - **Sequence length**: Only peptides between 5 and 50 amino acids are accepted.  
+        - **Sequence length**: Only peptides between 5 and 50 amino acids, using standard L-amino acids, are accepted.  
         - **Experimental validation**: Predictions should be interpreted with caution and validated experimentally.
         """)
 
-    # Collaboration & Contact
     with st.expander("🤝 Collaboration & Contact", expanded=False):
         st.markdown("""
         If you are interested in collaborating, testing the tool on your datasets, or need assistance, please contact:  
@@ -291,32 +287,34 @@ elif page == "🧪 Prediction":
                 except Exception as e:
                     st.warning(f"SHAP plot not available: {e}")
 
-# ---------- PAGE PERFORMANCE (améliorée avec descriptions) ----------
+# ---------- PAGE PERFORMANCE ----------
 elif page == "📊 Performance":
     st.title("Model performance (general model)")
 
     st.markdown("### Blind test results")
-    metrics = {"AUC": 0.883, "F1-score": 0.809, "Accuracy": 0.815, "Precision": 0.837, "Recall": 0.783}
+    metrics = {"AUC": 0.8022, "F1-score": 0.7189, "Accuracy": 0.7208, "Precision": 0.7214, "Recall": 0.7163, "MCC": 0.4417}
     df_metrics = pd.DataFrame(metrics.items(), columns=["Metric", "Value"])
     st.dataframe(df_metrics, use_container_width=True, hide_index=True)
 
     with st.expander("📖 What do these metrics mean?"):
         st.markdown("""
-        - **AUC (Area Under the ROC Curve)**: Measures the model's ability to distinguish active from inactive peptides. 0.883 is considered very good.
+        - **AUC (Area Under the ROC Curve)**: Measures the model's ability to distinguish active from inactive peptides.
         - **F1-score**: Harmonic mean of precision and recall. Balances false positives and false negatives.
         - **Accuracy**: Overall proportion of correct predictions.
         - **Precision**: Among peptides predicted as active, how many are truly active.
         - **Recall**: Among truly active peptides, how many were correctly identified.
+        - **MCC (Matthews Correlation Coefficient)**: Balanced measure robust to class imbalance, ranges from -1 to +1.
         """)
 
     st.markdown("---")
     st.markdown("### Training dataset characteristics")
     st.markdown("""
-    - **Total peptides**: 3,121 (1,561 active, 1,560 inactive)  
-    - **Length range**: 5–50 amino acids (average ~19 AA)  
+    - **Total peptides**: 2,830 (1,415 active, 1,415 inactive), length-bias corrected  
+    - **Length range**: 5–50 amino acids (mean ≈ 17.2 AA for active, ≈ 15.9 AA for inactive)  
     - **Descriptors**: 33 features (10 global, 20 AA composition, length, net charge, hydrophobicity)  
-    - **Model**: XGBoost with hyperparameter optimization (n_estimators=500, max_depth=10, learning_rate=0.05, etc.)
+    - **Model**: XGBoost (n_estimators=500, max_depth=10, learning_rate=0.05, subsample=0.8, colsample_bytree=0.7, reg_lambda=1, reg_alpha=0)  
+    - **Deployment note**: the model used in this app is retrained on 100% of the dataset above; metrics reported here come from a held-out 10% blind test evaluation of an equivalent model (90/10 split), for an honest estimate of generalization performance.
     """)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("XGBoost – Blind AUC = 0.883")
+st.sidebar.caption("XGBoost – Blind AUC = 0.802")
