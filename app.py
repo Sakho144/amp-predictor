@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import shap
 from modlamp.descriptors import GlobalDescriptor
 from difflib import SequenceMatcher
+from Bio import Align
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -148,26 +149,37 @@ def align_sequences(seq1, seq2):
     return html, identity
 
 def find_most_similar_by_identity(input_seq, ref_seqs, ref_labels):
+    aligner = Align.PairwiseAligner()
+    aligner.mode = 'global'
+    aligner.match_score = 1
+    aligner.mismatch_score = 0
+    aligner.open_gap_score = -1
+    aligner.extend_gap_score = -0.5
+
     best_ratio = 0
     best_seq = None
     best_label = None
-    for seq, label in zip(ref_seqs, ref_labels):
-        ratio = SequenceMatcher(None, input_seq, seq).ratio()
-        if ratio > best_ratio:
-            best_ratio = ratio
+    candidates = [(s, l) for s, l in zip(ref_seqs, ref_labels) if abs(len(s) - len(input_seq)) <= 10]
+    for seq, label in candidates:
+        score = aligner.score(input_seq, seq)
+        identity = score / max(len(input_seq), len(seq))
+        if identity > best_ratio:
+            best_ratio = identity
             best_seq = seq
             best_label = "Active" if label == 1 else "Inactive"
     return best_seq, best_label, best_ratio
 
 def get_confidence_level(identity_ratio):
+    # Thresholds and accuracy figures empirically derived from blind-test validation
+    # (n=283; see accompanying article, Results section)
     if identity_ratio > 0.8:
-        return "Very high", "🟢"
-    elif identity_ratio > 0.5:
-        return "High", "🟡"
+        return "Very high", "🟢", "Peptides with training-set identity above 80% were correctly classified 87.8% of the time in blind-test validation (n=90)."
+    elif identity_ratio > 0.7:
+        return "High", "🟡", "Peptides with training-set identity between 70% and 80% were correctly classified 84.0% of the time in blind-test validation (n=25)."
     elif identity_ratio > 0.3:
-        return "Moderate", "🟠"
+        return "Moderate", "🟠", "Peptides with training-set identity between 30% and 70% were correctly classified 63.8% of the time in blind-test validation (n=130)."
     else:
-        return "Low", "🔴"
+        return "Low", "🔴", "Peptides with training-set identity below 30% were correctly classified only 55.3% of the time in blind-test validation (n=38), close to chance level."
 
 # ---------- INTERFACE ----------
 st.sidebar.title("🧬 AMP-Predictor")
@@ -259,8 +271,9 @@ elif page == "🧪 Prediction":
                 best_seq, best_label, best_ratio = find_most_similar_by_identity(sequence, seq_ref, labels_ref)
                 st.markdown("---")
                 st.subheader("🔍 Similarity with known peptides")
-                conf_level, conf_icon = get_confidence_level(best_ratio)
+                conf_level, conf_icon, conf_explanation = get_confidence_level(best_ratio)
                 st.info(f"{conf_icon} **Confidence level:** {conf_level} (based on sequence identity with training set)")
+                st.caption(conf_explanation)
 
                 if best_ratio > 0.95:
                     st.success(f"**Identical to known peptide** (sequence identity = {best_ratio:.1%})")
