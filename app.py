@@ -124,29 +124,37 @@ def display_shap_local(features_scaled):
     plt.close()
 
 def align_sequences(seq1, seq2):
-    min_len = min(len(seq1), len(seq2))
-    seq1_aligned = seq1[:min_len]
-    seq2_aligned = seq2[:min_len]
-    matches = sum(1 for a, b in zip(seq1_aligned, seq2_aligned) if a == b)
-    identity = matches / min_len if min_len > 0 else 0
+    aligner = Align.PairwiseAligner()
+    aligner.mode = 'global'
+    aligner.match_score = 1
+    aligner.mismatch_score = 0
+    aligner.open_gap_score = -1
+    aligner.extend_gap_score = -0.5
+
+    alignment = aligner.align(seq1, seq2)[0]
+    s1_aligned, s2_aligned = str(alignment[0]), str(alignment[1])
+
+    score = aligner.score(seq1, seq2)
+    similarity = max(score / max(len(seq1), len(seq2)), 0)
+
     html = '<div style="font-family: monospace; font-size: 14px; line-height: 1.4;">'
     html += '<div style="margin-bottom: 4px;">'
-    for a, b in zip(seq1_aligned, seq2_aligned):
-        if a == b:
+    for a, b in zip(s1_aligned, s2_aligned):
+        if a == b and a != '-':
             html += f'<span style="background-color: #c8e6c9; padding: 0 2px;">{a}</span>'
         else:
             html += f'<span style="background-color: #ffcdd2; color: #c62828; padding: 0 2px;">{a}</span>'
     html += '</div><div style="margin-bottom: 4px;">'
-    for a, b in zip(seq1_aligned, seq2_aligned):
-        html += '|' if a == b else ' '
+    for a, b in zip(s1_aligned, s2_aligned):
+        html += '|' if (a == b and a != '-') else ' '
     html += '</div><div>'
-    for a, b in zip(seq1_aligned, seq2_aligned):
-        if a == b:
+    for a, b in zip(s1_aligned, s2_aligned):
+        if a == b and a != '-':
             html += f'<span style="background-color: #c8e6c9; padding: 0 2px;">{b}</span>'
         else:
             html += f'<span style="background-color: #ffcdd2; color: #c62828; padding: 0 2px;">{b}</span>'
     html += '</div></div>'
-    return html, identity
+    return html, similarity
 
 def find_most_similar_by_identity(input_seq, ref_seqs, ref_labels):
     aligner = Align.PairwiseAligner()
@@ -172,14 +180,14 @@ def find_most_similar_by_identity(input_seq, ref_seqs, ref_labels):
 def get_confidence_level(identity_ratio):
     # Thresholds and accuracy figures empirically derived from blind-test validation
     # (n=283; see accompanying article, Results section)
-    if identity_ratio > 0.8:
-        return "Very high", "🟢", "Peptides with training-set identity above 80% were correctly classified 87.8% of the time in blind-test validation (n=90)."
-    elif identity_ratio > 0.7:
-        return "High", "🟡", "Peptides with training-set identity between 70% and 80% were correctly classified 84.0% of the time in blind-test validation (n=25)."
-    elif identity_ratio > 0.3:
-        return "Moderate", "🟠", "Peptides with training-set identity between 30% and 70% were correctly classified 63.8% of the time in blind-test validation (n=130)."
+    if identity_ratio >= 0.8:
+        return "Very high", "🟢", "Peptides with training-set similarity above 80% were correctly classified 87.8% of the time in blind-test validation (n=90)."
+    elif identity_ratio >= 0.7:
+        return "High", "🟡", "Peptides with training-set similarity between 70% and 80% were correctly classified 84.0% of the time in blind-test validation (n=25)."
+    elif identity_ratio >= 0.3:
+        return "Moderate", "🟠", "Peptides with training-set similarity between 30% and 70% were correctly classified 63.8% of the time in blind-test validation (n=130)."
     else:
-        return "Low", "🔴", "Peptides with training-set identity below 30% were correctly classified only 55.3% of the time in blind-test validation (n=38), close to chance level."
+        return "Low", "🔴", "Peptides with training-set similarity below 30% were correctly classified only 55.3% of the time in blind-test validation (n=38), close to chance level."
 
 # ---------- INTERFACE ----------
 st.sidebar.title("🧬 AMP-Predictor")
@@ -272,21 +280,21 @@ elif page == "🧪 Prediction":
                 st.markdown("---")
                 st.subheader("🔍 Similarity with known peptides")
                 conf_level, conf_icon, conf_explanation = get_confidence_level(best_ratio)
-                st.info(f"{conf_icon} **Confidence level:** {conf_level} (based on sequence identity with training set)")
+                st.info(f"{conf_icon} **Confidence level:** {conf_level} (based on sequence similarity with training set)")
                 st.caption(conf_explanation)
 
                 if best_ratio > 0.95:
-                    st.success(f"**Identical to known peptide** (sequence identity = {best_ratio:.1%})")
+                    st.success(f"**Identical to known peptide** (sequence similarity = {best_ratio:.1%})")
                     st.markdown(f"Known peptide: `{best_seq}` ({best_label})")
                     align_html, _ = align_sequences(sequence, best_seq)
                     st.markdown(align_html, unsafe_allow_html=True)
                 elif best_ratio > 0.7:
-                    st.info(f"**Similar to known peptide** (sequence identity = {best_ratio:.1%})")
+                    st.info(f"**Similar to known peptide** (sequence similarity = {best_ratio:.1%})")
                     st.markdown(f"Known peptide: `{best_seq}` ({best_label})")
                     align_html, _ = align_sequences(sequence, best_seq)
                     st.markdown(align_html, unsafe_allow_html=True)
                 else:
-                    st.info(f"No highly similar peptide found (best identity = {best_ratio:.1%}). Prediction relies on general patterns.")
+                    st.info(f"No highly similar peptide found (best similarity = {best_ratio:.1%}). Prediction relies on general patterns.")
 
                 # Properties
                 st.subheader("Calculated properties")
