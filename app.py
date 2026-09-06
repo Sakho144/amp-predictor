@@ -122,6 +122,7 @@ def display_shap_local(features_scaled):
     plt.title("Local SHAP explanation - Descriptor contributions")
     st.pyplot(fig)
     plt.close()
+    st.caption("SHAP contributions are displayed on the model's raw log-odds scale. Feature values shown in the plot are standardized values used as model inputs.")
 
 def align_sequences(seq1, seq2):
     aligner = Align.PairwiseAligner()
