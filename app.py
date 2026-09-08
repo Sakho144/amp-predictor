@@ -7,6 +7,7 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 import shap
+import xgboost as xgb
 from modlamp.descriptors import GlobalDescriptor
 from difflib import SequenceMatcher
 from Bio import Align
@@ -20,7 +21,8 @@ st.set_page_config(page_title="AMP-Predictor", page_icon="🧬", layout="wide")
 @st.cache_resource
 def load_model():
     try:
-        model = joblib.load("model_xgb_final_100.pkl")
+        model = xgb.XGBClassifier()
+        model.load_model("model_xgb_final_100.ubj")
         scaler = joblib.load("scaler_final_100.pkl")
         return model, scaler
     except Exception as e:
@@ -28,13 +30,6 @@ def load_model():
         st.stop()
 
 model, scaler = load_model()
-
-# ---------- SHAP EXPLAINER ----------
-@st.cache_resource
-def load_shap_explainer():
-    return shap.TreeExplainer(model)
-
-shap_explainer = load_shap_explainer()
 
 # ---------- CHARGEMENT DU DATASET DE RÉFÉRENCE ----------
 @st.cache_data
@@ -101,24 +96,26 @@ def get_properties(features):
     return props
 
 def display_shap_local(features_scaled):
-    shap_values = shap_explainer.shap_values(features_scaled)
-    if isinstance(shap_values, list):
-        shap_vals = shap_values[1][0] if len(shap_values) == 2 else shap_values[0][0]
-        expected = shap_explainer.expected_value[1] if isinstance(shap_explainer.expected_value, list) else shap_explainer.expected_value
-    else:
-        if shap_values.ndim == 2:
-            shap_vals = shap_values[0]
-        elif shap_values.ndim == 3:
-            shap_vals = shap_values[0, :, 1]
-        else:
-            st.error("Unexpected SHAP shape")
-            return
-        expected = shap_explainer.expected_value
-        if isinstance(expected, list):
-            expected = expected[1] if len(expected) > 1 else expected[0]
-    exp = shap.Explanation(values=shap_vals, base_values=expected, data=features_scaled[0], feature_names=FEATURE_NAMES)
-    fig, ax = plt.subplots(figsize=(10, 6))
-    shap.waterfall_plot(exp, max_display=15)
+    contributions = np.asarray(
+        model.get_booster().predict(
+            xgb.DMatrix(features_scaled),
+            pred_contribs=True,
+            approx_contribs=False,
+        ),
+        dtype=float,
+    )
+    if contributions.shape != (1, len(FEATURE_NAMES) + 1):
+        raise ValueError(f"Unexpected TreeSHAP contribution shape: {contributions.shape}")
+    shap_vals = contributions[0, :-1]
+    expected = float(contributions[0, -1])
+    exp = shap.Explanation(
+        values=shap_vals,
+        base_values=expected,
+        data=features_scaled[0],
+        feature_names=FEATURE_NAMES,
+    )
+    fig, _ = plt.subplots(figsize=(10, 6))
+    shap.plots.waterfall(exp, max_display=15, show=False)
     plt.title("Local SHAP explanation - Descriptor contributions")
     st.pyplot(fig)
     plt.close()
@@ -157,7 +154,7 @@ def align_sequences(seq1, seq2):
     html += '</div></div>'
     return html, similarity
 
-def find_most_similar_by_identity(input_seq, ref_seqs, ref_labels):
+def find_most_similar(input_seq, ref_seqs, ref_labels):
     aligner = Align.PairwiseAligner()
     aligner.mode = 'global'
     aligner.match_score = 1
@@ -171,24 +168,24 @@ def find_most_similar_by_identity(input_seq, ref_seqs, ref_labels):
     candidates = [(s, l) for s, l in zip(ref_seqs, ref_labels) if abs(len(s) - len(input_seq)) <= 10]
     for seq, label in candidates:
         score = aligner.score(input_seq, seq)
-        identity = score / max(len(input_seq), len(seq))
-        if identity > best_ratio:
-            best_ratio = identity
+        similarity = score / max(len(input_seq), len(seq))
+        if similarity > best_ratio:
+            best_ratio = similarity
             best_seq = seq
             best_label = "Active" if label == 1 else "Inactive"
     return best_seq, best_label, best_ratio
 
-def get_confidence_level(identity_ratio):
-    # Thresholds and accuracy figures empirically derived from blind-test validation
+def get_confidence_level(similarity_ratio):
+    # Thresholds and accuracy figures derived descriptively from held-out evaluation
     # (n=283; see accompanying article, Results section)
-    if identity_ratio >= 0.8:
-        return "Very high", "🟢", "Peptides with training-set similarity above 80% were correctly classified 87.8% of the time in blind-test validation (n=90)."
-    elif identity_ratio >= 0.7:
-        return "High", "🟡", "Peptides with training-set similarity between 70% and 80% were correctly classified 84.0% of the time in blind-test validation (n=25)."
-    elif identity_ratio >= 0.3:
-        return "Moderate", "🟠", "Peptides with training-set similarity between 30% and 70% were correctly classified 63.8% of the time in blind-test validation (n=130)."
+    if similarity_ratio >= 0.8:
+        return "Very high", "🟢", "Peptides with a training-set similarity score of at least 0.80 were correctly classified 87.8% of the time in held-out evaluation (n=90)."
+    elif similarity_ratio >= 0.7:
+        return "High", "🟡", "Peptides with a training-set similarity score from 0.70 to below 0.80 were correctly classified 80.0% of the time in held-out evaluation (n=25)."
+    elif similarity_ratio >= 0.3:
+        return "Moderate", "🟠", "Peptides with a training-set similarity score from 0.30 to below 0.70 were correctly classified 70.0% of the time in held-out evaluation (n=130)."
     else:
-        return "Low", "🔴", "Peptides with training-set similarity below 30% were correctly classified only 55.3% of the time in blind-test validation (n=38), close to chance level."
+        return "Low", "🔴", "Peptides with a training-set similarity score below 0.30 were correctly classified 50.0% of the time in held-out evaluation (n=38)."
 
 # ---------- INTERFACE ----------
 st.sidebar.title("🧬 AMP-Predictor")
@@ -213,15 +210,15 @@ if page == "🏠 Home":
         - **Output**: Probability of being active (0–100%) and a binary prediction (Active/Inactive), plus a local SHAP explanation and similarity search.
         """)
 
-    # Key results (blind test, 90/10 split model — reported in the article)
-    st.subheader("📊 Model performance (blind test)")
+    # Key results (held-out test, 90/10 split model — reported in the article)
+    st.subheader("📊 Model performance (held-out test)")
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("AUC", "0.802")
-    col2.metric("F1-score", "0.719")
-    col3.metric("Accuracy", "0.721")
-    col4.metric("Precision", "0.721")
+    col1.metric("AUC", "0.809")
+    col2.metric("F1-score", "0.732")
+    col3.metric("Accuracy", "0.739")
+    col4.metric("Precision", "0.748")
     col5.metric("Recall", "0.716")
-    st.markdown("Blind test on 10% of the data (283 peptides never used during training). The model deployed in this app is retrained on 100% of the dataset for maximal data usage; the metrics above come from the held-out evaluation reported in the article.")
+    st.markdown("Held-out evaluation on 10% of the data (283 peptides not used to fit the evaluation model). The model deployed in this app was subsequently retrained on 100% of the dataset; the metrics above come from the 90/10 evaluation reported in the article.")
 
     with st.expander("⚠️ Limitations", expanded=False):
         st.markdown("""
@@ -277,19 +274,19 @@ elif page == "🧪 Prediction":
                     st.warning("⚠️ Short peptide (<10 AA) – prediction reliability may be lower.")
 
                 # Similarity and confidence
-                best_seq, best_label, best_ratio = find_most_similar_by_identity(sequence, seq_ref, labels_ref)
+                best_seq, best_label, best_ratio = find_most_similar(sequence, seq_ref, labels_ref)
                 st.markdown("---")
                 st.subheader("🔍 Similarity with known peptides")
                 conf_level, conf_icon, conf_explanation = get_confidence_level(best_ratio)
                 st.info(f"{conf_icon} **Confidence level:** {conf_level} (based on sequence similarity with training set)")
                 st.caption(conf_explanation)
 
-                if best_ratio > 0.95:
+                if np.isclose(best_ratio, 1.0):
                     st.success(f"**Identical to known peptide** (sequence similarity = {best_ratio:.1%})")
                     st.markdown(f"Known peptide: `{best_seq}` ({best_label})")
                     align_html, _ = align_sequences(sequence, best_seq)
                     st.markdown(align_html, unsafe_allow_html=True)
-                elif best_ratio > 0.7:
+                elif best_ratio >= 0.7:
                     st.info(f"**Similar to known peptide** (sequence similarity = {best_ratio:.1%})")
                     st.markdown(f"Known peptide: `{best_seq}` ({best_label})")
                     align_html, _ = align_sequences(sequence, best_seq)
@@ -313,8 +310,8 @@ elif page == "🧪 Prediction":
 elif page == "📊 Performance":
     st.title("Model performance (general model)")
 
-    st.markdown("### Blind test results")
-    metrics = {"AUC": 0.8022, "F1-score": 0.7189, "Accuracy": 0.7208, "Precision": 0.7214, "Recall": 0.7163, "MCC": 0.4417}
+    st.markdown("### Held-out test results")
+    metrics = {"AUC": 0.8090, "F1-score": 0.7319, "Accuracy": 0.7385, "Precision": 0.7481, "Recall": 0.7163, "MCC": 0.4774}
     df_metrics = pd.DataFrame(metrics.items(), columns=["Metric", "Value"])
     st.dataframe(df_metrics, use_container_width=True, hide_index=True)
 
@@ -334,9 +331,9 @@ elif page == "📊 Performance":
     - **Total peptides**: 2,830 (1,415 active, 1,415 inactive), length-bias corrected  
     - **Length range**: 5–50 amino acids (mean ≈ 17.2 AA for active, ≈ 15.9 AA for inactive)  
     - **Descriptors**: 33 features (10 global, 20 AA composition, length, net charge, hydrophobicity)  
-    - **Model**: XGBoost (n_estimators=500, max_depth=10, learning_rate=0.05, subsample=0.8, colsample_bytree=0.7, reg_lambda=1, reg_alpha=0)  
-    - **Deployment note**: the model used in this app is retrained on 100% of the dataset above; metrics reported here come from a held-out 10% blind test evaluation of an equivalent model (90/10 split), for an honest estimate of generalization performance.
+    - **Model**: XGBoost (n_estimators=200, max_depth=12, learning_rate=0.1, subsample=1.0, colsample_bytree=0.7, gamma=0, reg_lambda=10, reg_alpha=0)
+    - **Deployment note**: the model used in this app was retrained on 100% of the dataset above after evaluation; metrics reported here come from the held-out 10% evaluation of the corresponding model configuration trained on the 90% development set.
     """)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("XGBoost – Blind AUC = 0.802")
+st.sidebar.caption("XGBoost – Held-out AUC = 0.809")
