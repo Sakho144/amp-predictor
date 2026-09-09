@@ -8,18 +8,22 @@ https://amp-predictor.streamlit.app/
 
 ## Model and evaluation
 
-The production model was trained on the complete corrected, length-balanced dataset of 2,830 unique peptides (1,415 active and 1,415 inactive) after model selection and held-out evaluation were completed.
+The production model was trained on the complete recurated, exact-length-matched dataset of 1,278 unique peptides (639 active and 639 inactive) after model selection and held-out evaluation were completed. The active and inactive classes have identical peptide-length distributions.
 
-The corresponding configuration trained on the 2,547-peptide development set achieved the following results on the 283-peptide held-out set:
+The corresponding configuration trained on the 1,150-peptide development set achieved the following results on the independent 128-peptide held-out set:
 
-- ROC AUC: 0.8090
-- F1-score: 0.7319
-- Accuracy: 0.7385
-- Precision: 0.7481
-- Recall: 0.7163
-- Matthews correlation coefficient: 0.4774
+- ROC AUC: 0.8101
+- F1-score: 0.7154
+- Accuracy: 0.7266
+- Precision: 0.7458
+- Recall: 0.6875
+- Matthews correlation coefficient: 0.4545
 
 The deployed XGBoost configuration uses 200 estimators, maximum depth 12, learning rate 0.1, subsample 1.0, column subsampling 0.7, gamma 0, L1 regularization 0, and L2 regularization 10.
+
+## Dataset curation
+
+Active peptides were obtained from APD3 and BIOPEP-UWM. Inactive peptides were selected from DBAASP using unambiguous MIC or IC50 evidence after unit harmonization. Censored, indeterminate, conflicting, and cross-source conflicting records were excluded. The final classes were matched exactly by sequence length before the development and held-out sets were created.
 
 ## Repository files
 
@@ -27,7 +31,7 @@ The deployed XGBoost configuration uses 200 estimators, maximum depth 12, learni
 - `model_xgb_final_100.ubj`: native XGBoost production model loaded by the application.
 - `model_xgb_final_100.pkl`: Joblib copy of the same production model for reproducibility.
 - `scaler_final_100.pkl`: fitted 33-feature scaler.
-- `peptide_features_length_balanced.csv`: complete public balanced dataset, including sequences, descriptors, identifiers, and activity labels; also used for similarity search.
+- `peptide_features_length_balanced.csv`: complete public matched dataset, including sequences, descriptors, identifiers, and activity labels; also used for similarity search.
 - `modlamp/`: locally included modlAMP 4.3.0 modules required for descriptor calculation.
 - `THIRD_PARTY_NOTICES.md`: attribution and license information for included third-party code.
 - `requirements.txt`: pinned deployment dependencies.
@@ -45,7 +49,7 @@ The application computes the descriptors with the included modlAMP 4.3.0 code. I
 
 ## Interpretation
 
-Predictions indicate general antimicrobial activity and do not identify a target organism or estimate a minimum inhibitory concentration. The similarity-based confidence labels summarize held-out accuracy strata and are not calibrated probabilities. Predictions require experimental validation.
+Predictions indicate general antimicrobial activity and do not identify a target organism or estimate a minimum inhibitory concentration. Similarity-based confidence labels summarize held-out accuracy strata and are not calibrated probabilities. Predictions require experimental validation.
 
 Local feature explanations use exact XGBoost TreeSHAP contributions on the raw model margin (log-odds) scale. Descriptor values displayed in the waterfall plot are standardized model inputs.
 

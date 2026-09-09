@@ -177,15 +177,15 @@ def find_most_similar(input_seq, ref_seqs, ref_labels):
 
 def get_confidence_level(similarity_ratio):
     # Thresholds and accuracy figures derived descriptively from held-out evaluation
-    # (n=283; see accompanying article, Results section)
+    # (n=128; see accompanying article, Results section)
     if similarity_ratio >= 0.8:
-        return "Very high", "🟢", "Peptides with a training-set similarity score of at least 0.80 were correctly classified 87.8% of the time in held-out evaluation (n=90)."
+        return "Very high", "🟢", "Peptides with a training-set similarity score of at least 0.80 were correctly classified 93.1% of the time in held-out evaluation (n=29)."
     elif similarity_ratio >= 0.7:
-        return "High", "🟡", "Peptides with a training-set similarity score from 0.70 to below 0.80 were correctly classified 80.0% of the time in held-out evaluation (n=25)."
+        return "High", "🟡", "Peptides with a training-set similarity score from 0.70 to below 0.80 were correctly classified 87.5% of the time in held-out evaluation (n=16)."
     elif similarity_ratio >= 0.3:
-        return "Moderate", "🟠", "Peptides with a training-set similarity score from 0.30 to below 0.70 were correctly classified 70.0% of the time in held-out evaluation (n=130)."
+        return "Moderate", "🟠", "Peptides with a training-set similarity score from 0.30 to below 0.70 were correctly classified 66.7% of the time in held-out evaluation (n=63)."
     else:
-        return "Low", "🔴", "Peptides with a training-set similarity score below 0.30 were correctly classified 50.0% of the time in held-out evaluation (n=38)."
+        return "Low", "🔴", "Peptides with a training-set similarity score below 0.30 were correctly classified 50.0% of the time in held-out evaluation (n=20)."
 
 # ---------- INTERFACE ----------
 st.sidebar.title("🧬 AMP-Predictor")
@@ -206,19 +206,19 @@ if page == "🏠 Home":
         st.markdown("""
         - **Input**: Peptide sequence (5–50 amino acids, uppercase letters A–Y).  
         - **Descriptors**: 33 features including amino acid composition, length, net charge, hydrophobicity, and 10 global descriptors (MW, pI, aliphatic index, Boman index, etc.) computed with `modlAMP`.  
-        - **Model**: XGBoost classifier trained on a length-bias-corrected, quality-filtered dataset of 2,830 peptides (1,415 active, 1,415 inactive).  
+        - **Model**: XGBoost classifier trained on a quality-filtered, exact-length-matched dataset of 1,278 peptides (639 active, 639 inactive).
         - **Output**: Probability of being active (0–100%) and a binary prediction (Active/Inactive), plus a local SHAP explanation and similarity search.
         """)
 
     # Key results (held-out test, 90/10 split model — reported in the article)
     st.subheader("📊 Model performance (held-out test)")
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("AUC", "0.809")
-    col2.metric("F1-score", "0.732")
-    col3.metric("Accuracy", "0.739")
-    col4.metric("Precision", "0.748")
-    col5.metric("Recall", "0.716")
-    st.markdown("Held-out evaluation on 10% of the data (283 peptides not used to fit the evaluation model). The model deployed in this app was subsequently retrained on 100% of the dataset; the metrics above come from the 90/10 evaluation reported in the article.")
+    col1.metric("AUC", "0.810")
+    col2.metric("F1-score", "0.715")
+    col3.metric("Accuracy", "0.727")
+    col4.metric("Precision", "0.746")
+    col5.metric("Recall", "0.688")
+    st.markdown("Held-out evaluation on 10% of the data (128 peptides not used to fit the evaluation model). The model deployed in this app was subsequently retrained on 100% of the dataset; the metrics above come from the 90/10 evaluation reported in the article.")
 
     with st.expander("⚠️ Limitations", expanded=False):
         st.markdown("""
@@ -311,7 +311,7 @@ elif page == "📊 Performance":
     st.title("Model performance (general model)")
 
     st.markdown("### Held-out test results")
-    metrics = {"AUC": 0.8090, "F1-score": 0.7319, "Accuracy": 0.7385, "Precision": 0.7481, "Recall": 0.7163, "MCC": 0.4774}
+    metrics = {"AUC": 0.8101, "F1-score": 0.7154, "Accuracy": 0.7266, "Precision": 0.7458, "Recall": 0.6875, "MCC": 0.4545}
     df_metrics = pd.DataFrame(metrics.items(), columns=["Metric", "Value"])
     st.dataframe(df_metrics, use_container_width=True, hide_index=True)
 
@@ -328,12 +328,12 @@ elif page == "📊 Performance":
     st.markdown("---")
     st.markdown("### Training dataset characteristics")
     st.markdown("""
-    - **Total peptides**: 2,830 (1,415 active, 1,415 inactive), length-bias corrected  
-    - **Length range**: 5–50 amino acids (mean ≈ 17.2 AA for active, ≈ 15.9 AA for inactive)  
+    - **Total peptides**: 1,278 (639 active, 639 inactive), exactly matched by peptide length
+    - **Length range**: 5–49 amino acids (mean 15.94 AA in both classes)
     - **Descriptors**: 33 features (10 global, 20 AA composition, length, net charge, hydrophobicity)  
     - **Model**: XGBoost (n_estimators=200, max_depth=12, learning_rate=0.1, subsample=1.0, colsample_bytree=0.7, gamma=0, reg_lambda=10, reg_alpha=0)
     - **Deployment note**: the model used in this app was retrained on 100% of the dataset above after evaluation; metrics reported here come from the held-out 10% evaluation of the corresponding model configuration trained on the 90% development set.
     """)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("XGBoost – Held-out AUC = 0.809")
+st.sidebar.caption("XGBoost – Held-out AUC = 0.810")
