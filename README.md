@@ -49,7 +49,7 @@ The application computes the descriptors with the included modlAMP 4.3.0 code. I
 
 ## Interpretation
 
-Predictions indicate general antimicrobial activity and do not identify a target organism or estimate a minimum inhibitory concentration. Similarity-based confidence labels summarize held-out accuracy strata and are not calibrated probabilities. Predictions require experimental validation.
+Predictions indicate general antimicrobial activity and do not identify a target organism or estimate a minimum inhibitory concentration. Similarity-based evidence levels summarize held-out accuracy strata and are not calibrated probabilities. Predictions require experimental validation.
 
 Local feature explanations use exact XGBoost TreeSHAP contributions on the raw model margin (log-odds) scale. Descriptor values displayed in the waterfall plot are standardized model inputs.
 

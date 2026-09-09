@@ -278,7 +278,7 @@ elif page == "🧪 Prediction":
                 st.markdown("---")
                 st.subheader("🔍 Similarity with known peptides")
                 conf_level, conf_icon, conf_explanation = get_confidence_level(best_ratio)
-                st.info(f"{conf_icon} **Confidence level:** {conf_level} (based on sequence similarity with training set)")
+                st.info(f"{conf_icon} **Similarity-based evidence level:** {conf_level} (based on sequence similarity with training set)")
                 st.caption(conf_explanation)
 
                 if np.isclose(best_ratio, 1.0):
