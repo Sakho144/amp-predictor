@@ -54,8 +54,8 @@ FEATURE_NAMES = [
 # ---------- FONCTIONS ----------
 def compute_features(sequence):
     sequence = sequence.upper().strip()
-    if len(sequence) < 5 or len(sequence) > 50:
-        return None, f"Length must be 5-50 AA (got {len(sequence)})."
+    if len(sequence) < 5 or len(sequence) > 49:
+        return None, f"Length must be 5-49 AA (got {len(sequence)})."
     invalid = set(sequence) - VALID_AA
     if invalid:
         return None, f"Invalid amino acids: {', '.join(sorted(invalid))}. Use only ACDEFGHIKLMNPQRSTVWY."
@@ -204,7 +204,7 @@ if page == "🏠 Home":
 
     with st.expander("⚙️ How it works", expanded=False):
         st.markdown("""
-        - **Input**: Peptide sequence (5–50 amino acids, uppercase letters A–Y).  
+        - **Input**: Peptide sequence (5–49 amino acids, uppercase letters A–Y).
         - **Descriptors**: 33 features including amino acid composition, length, net charge, hydrophobicity, and 10 global descriptors (MW, pI, aliphatic index, Boman index, etc.) computed with `modlAMP`.  
         - **Model**: XGBoost classifier trained on a quality-filtered, exact-length-matched dataset of 1,278 peptides (639 active, 639 inactive).
         - **Output**: Probability of being active (0–100%) and a binary prediction (Active/Inactive), plus a local SHAP explanation and similarity search.
@@ -225,7 +225,7 @@ if page == "🏠 Home":
         - **Short peptides (<10 AA)**: Predictions are less reliable due to underrepresentation in the training set.  
         - **General activity only**: The model does not distinguish between Gram-positive, Gram-negative, or fungal targets.  
         - **No MIC prediction**: The model outputs only the probability of activity, not the minimal inhibitory concentration.  
-        - **Sequence length**: Only peptides between 5 and 50 amino acids, using standard L-amino acids, are accepted.  
+        - **Sequence length**: Only peptides between 5 and 49 amino acids, using standard L-amino acids, are accepted.
         - **Experimental validation**: Predictions should be interpreted with caution and validated experimentally.
         """)
 
@@ -239,7 +239,7 @@ if page == "🏠 Home":
 # ---------- PAGE PREDICTION ----------
 elif page == "🧪 Prediction":
     st.title("Predict antimicrobial activity")
-    st.markdown("Enter a peptide sequence (5-50 AA, uppercase).")
+    st.markdown("Enter a peptide sequence (5-49 AA, uppercase).")
 
     if 'seq_input' not in st.session_state:
         st.session_state.seq_input = ""

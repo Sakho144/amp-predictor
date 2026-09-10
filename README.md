@@ -1,6 +1,6 @@
 # AMP-Predictor
 
-AMP-Predictor is a Streamlit application that predicts general antimicrobial activity for peptide sequences containing 5–50 standard amino acids. It uses an XGBoost classifier trained with 33 sequence-derived descriptors.
+AMP-Predictor is a Streamlit application that predicts general antimicrobial activity for peptide sequences containing 5–49 standard amino acids. It uses an XGBoost classifier trained with 33 sequence-derived descriptors.
 
 ## Live application
 
