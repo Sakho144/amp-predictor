@@ -7,7 +7,6 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 import shap
-import xgboost as xgb
 from modlamp.descriptors import GlobalDescriptor
 from difflib import SequenceMatcher
 from Bio import Align
@@ -21,20 +20,24 @@ st.set_page_config(page_title="AMP-Predictor", page_icon="🧬", layout="wide")
 @st.cache_resource
 def load_model():
     try:
-        model = xgb.XGBClassifier()
-        model.load_model("model_xgb_final_100.ubj")
+        model = joblib.load("model_random_forest_final_100.pkl")
         scaler = joblib.load("scaler_final_100.pkl")
         return model, scaler
     except Exception as e:
         st.error(f"Model files not found: {e}")
         st.stop()
 
+@st.cache_resource
+def load_shap_explainer():
+    return shap.TreeExplainer(model)
+
 model, scaler = load_model()
+shap_explainer = load_shap_explainer()
 
 # ---------- CHARGEMENT DU DATASET DE RÉFÉRENCE ----------
 @st.cache_data
 def load_reference_data():
-    df = pd.read_csv("peptide_features_length_balanced.csv")
+    df = pd.read_csv("peptide_features_source_controlled.csv")
     sequences_ref = df["sequence"].tolist()
     labels_ref = df["activity_label_final"].tolist()
     return sequences_ref, labels_ref
@@ -54,8 +57,8 @@ FEATURE_NAMES = [
 # ---------- FONCTIONS ----------
 def compute_features(sequence):
     sequence = sequence.upper().strip()
-    if len(sequence) < 5 or len(sequence) > 49:
-        return None, f"Length must be 5-49 AA (got {len(sequence)})."
+    if len(sequence) < 5 or len(sequence) > 46:
+        return None, f"Length must be 5-46 AA (got {len(sequence)})."
     invalid = set(sequence) - VALID_AA
     if invalid:
         return None, f"Invalid amino acids: {', '.join(sorted(invalid))}. Use only ACDEFGHIKLMNPQRSTVWY."
@@ -96,18 +99,19 @@ def get_properties(features):
     return props
 
 def display_shap_local(features_scaled):
-    contributions = np.asarray(
-        model.get_booster().predict(
-            xgb.DMatrix(features_scaled),
-            pred_contribs=True,
-            approx_contribs=False,
-        ),
-        dtype=float,
-    )
-    if contributions.shape != (1, len(FEATURE_NAMES) + 1):
-        raise ValueError(f"Unexpected TreeSHAP contribution shape: {contributions.shape}")
-    shap_vals = contributions[0, :-1]
-    expected = float(contributions[0, -1])
+    values = shap_explainer.shap_values(features_scaled, check_additivity=False)
+    if isinstance(values, list):
+        shap_vals = np.asarray(values[1][0], dtype=float)
+    else:
+        values = np.asarray(values, dtype=float)
+        if values.ndim == 3 and values.shape[2] == 2:
+            shap_vals = values[0, :, 1]
+        elif values.ndim == 2:
+            shap_vals = values[0]
+        else:
+            raise ValueError(f"Unexpected TreeSHAP shape: {values.shape}")
+    expected_values = np.asarray(shap_explainer.expected_value, dtype=float).reshape(-1)
+    expected = float(expected_values[1] if expected_values.size > 1 else expected_values[0])
     exp = shap.Explanation(
         values=shap_vals,
         base_values=expected,
@@ -119,7 +123,7 @@ def display_shap_local(features_scaled):
     plt.title("Local SHAP explanation - Descriptor contributions")
     st.pyplot(fig)
     plt.close()
-    st.caption("SHAP contributions are displayed on the model's raw log-odds scale. Feature values shown in the plot are standardized values used as model inputs.")
+    st.caption("SHAP contributions are displayed on the active-class probability scale. Feature values shown in the plot are standardized model inputs.")
 
 def align_sequences(seq1, seq2):
     aligner = Align.PairwiseAligner()
@@ -176,16 +180,18 @@ def find_most_similar(input_seq, ref_seqs, ref_labels):
     return best_seq, best_label, best_ratio
 
 def get_confidence_level(similarity_ratio):
-    # Thresholds and accuracy figures derived descriptively from held-out evaluation
-    # (n=128; see accompanying article, Results section)
+    # Descriptive similarity context from the leakage-resistant A9 held-out split.
+    # These categories are not calibrated probabilities of prediction correctness.
     if similarity_ratio >= 0.8:
-        return "Very high", "🟢", "Peptides with a training-set similarity score of at least 0.80 were correctly classified 93.1% of the time in held-out evaluation (n=29)."
+        return "Very high", "🟢", "No held-out peptide fell in this similarity range because groups with similarity of at least 0.80 were kept in the same partition."
     elif similarity_ratio >= 0.7:
-        return "High", "🟡", "Peptides with a training-set similarity score from 0.70 to below 0.80 were correctly classified 87.5% of the time in held-out evaluation (n=16)."
+        return "High", "🟡", "Held-out accuracy in this range was 85.7% (12/14 peptides)."
+    elif similarity_ratio >= 0.5:
+        return "Moderate to high", "🟠", "Held-out accuracy in this range was 75.8% (25/33 peptides)."
     elif similarity_ratio >= 0.3:
-        return "Moderate", "🟠", "Peptides with a training-set similarity score from 0.30 to below 0.70 were correctly classified 66.7% of the time in held-out evaluation (n=63)."
+        return "Moderate", "🟠", "Held-out accuracy in this range was 76.6% (36/47 peptides)."
     else:
-        return "Low", "🔴", "Peptides with a training-set similarity score below 0.30 were correctly classified 50.0% of the time in held-out evaluation (n=20)."
+        return "Low", "🔴", "Held-out accuracy in this range was 70.0% (21/30 peptides)."
 
 # ---------- INTERFACE ----------
 st.sidebar.title("🧬 AMP-Predictor")
@@ -204,28 +210,29 @@ if page == "🏠 Home":
 
     with st.expander("⚙️ How it works", expanded=False):
         st.markdown("""
-        - **Input**: Peptide sequence (5–49 amino acids, uppercase letters A–Y).
+        - **Input**: Peptide sequence (5–46 standard amino acids, using only ACDEFGHIKLMNPQRSTVWY).
         - **Descriptors**: 33 features including amino acid composition, length, net charge, hydrophobicity, and 10 global descriptors (MW, pI, aliphatic index, Boman index, etc.) computed with `modlAMP`.  
-        - **Model**: XGBoost classifier trained on a quality-filtered, exact-length-matched dataset of 1,278 peptides (639 active, 639 inactive).
+        - **Model**: Random Forest classifier trained on a source-controlled, exact-length-matched dataset of 1,196 peptides (598 active, 598 inactive).
         - **Output**: Probability of being active (0–100%) and a binary prediction (Active/Inactive), plus a local SHAP explanation and similarity search.
         """)
 
     # Key results (held-out test, 90/10 split model — reported in the article)
     st.subheader("📊 Model performance (held-out test)")
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("AUC", "0.810")
-    col2.metric("F1-score", "0.715")
-    col3.metric("Accuracy", "0.727")
-    col4.metric("Precision", "0.746")
-    col5.metric("Recall", "0.688")
-    st.markdown("Held-out evaluation on 10% of the data (128 peptides not used to fit the evaluation model). The model deployed in this app was subsequently retrained on 100% of the dataset; the metrics above come from the 90/10 evaluation reported in the article.")
+    col1.metric("AUC", "0.869")
+    col2.metric("F1-score", "0.750")
+    col3.metric("Accuracy", "0.758")
+    col4.metric("Precision", "0.776")
+    col5.metric("Recall", "0.726")
+    st.markdown("Held-out evaluation on 124 peptides separated from development data by sequence-similarity groups. The model deployed in this app was subsequently retrained on 100% of the dataset; the metrics above come from the 90/10 evaluation reported in the article.")
 
     with st.expander("⚠️ Limitations", expanded=False):
         st.markdown("""
         - **Short peptides (<10 AA)**: Predictions are less reliable due to underrepresentation in the training set.  
         - **General activity only**: The model does not distinguish between Gram-positive, Gram-negative, or fungal targets.  
         - **No MIC prediction**: The model outputs only the probability of activity, not the minimal inhibitory concentration.  
-        - **Sequence length**: Only peptides between 5 and 49 amino acids, using standard L-amino acids, are accepted.
+        - **Sequence length**: Only peptides between 5 and 46 amino acids, using standard L-amino acids, are accepted.
+        - **External validation**: Performance varied across sources (DRAMP4 AUC 0.722; ACS sensitivity 95.2%; APD6 sensitivity 50.0%).
         - **Experimental validation**: Predictions should be interpreted with caution and validated experimentally.
         """)
 
@@ -239,7 +246,7 @@ if page == "🏠 Home":
 # ---------- PAGE PREDICTION ----------
 elif page == "🧪 Prediction":
     st.title("Predict antimicrobial activity")
-    st.markdown("Enter a peptide sequence (5-49 AA, uppercase).")
+    st.markdown("Enter a peptide sequence (5-46 standard amino acids, uppercase).")
 
     if 'seq_input' not in st.session_state:
         st.session_state.seq_input = ""
@@ -248,11 +255,11 @@ elif page == "🧪 Prediction":
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Load active example (Magainin-2)"):
+        if st.button("Load example (Magainin-2)"):
             st.session_state.seq_input = "GIGKFLHSAKKFGKAFVGEIMNS"
             st.rerun()
     with col2:
-        if st.button("Load inactive example (Poly-Alanine)"):
+        if st.button("Load example (Poly-Alanine)"):
             st.session_state.seq_input = "AAAAAAAAAAAAAAAAAAAA"
             st.rerun()
 
@@ -311,9 +318,9 @@ elif page == "📊 Performance":
     st.title("Model performance (general model)")
 
     st.markdown("### Held-out test results")
-    metrics = {"AUC": 0.8101, "F1-score": 0.7154, "Accuracy": 0.7266, "Precision": 0.7458, "Recall": 0.6875, "MCC": 0.4545}
+    metrics = {"AUC": 0.8689, "F1-score": 0.7500, "Accuracy": 0.7581, "Precision": 0.7759, "Recall": 0.7258, "MCC": 0.5172}
     df_metrics = pd.DataFrame(metrics.items(), columns=["Metric", "Value"])
-    st.dataframe(df_metrics, use_container_width=True, hide_index=True)
+    st.dataframe(df_metrics, width="stretch", hide_index=True)
 
     with st.expander("📖 What do these metrics mean?"):
         st.markdown("""
@@ -328,12 +335,12 @@ elif page == "📊 Performance":
     st.markdown("---")
     st.markdown("### Training dataset characteristics")
     st.markdown("""
-    - **Total peptides**: 1,278 (639 active, 639 inactive), exactly matched by peptide length
-    - **Length range**: 5–49 amino acids (mean 15.94 AA in both classes)
+    - **Total peptides**: 1,196 (598 active, 598 inactive), balanced within source and exactly matched by peptide length
+    - **Length range**: 5–46 amino acids (mean 14.32 AA in both classes)
     - **Descriptors**: 33 features (10 global, 20 AA composition, length, net charge, hydrophobicity)  
-    - **Model**: XGBoost (n_estimators=200, max_depth=12, learning_rate=0.1, subsample=1.0, colsample_bytree=0.7, gamma=0, reg_lambda=10, reg_alpha=0)
+    - **Model**: Random Forest (600 trees, maximum depth 20, minimum split size 5, square-root feature sampling, balanced-subsample class weights)
     - **Deployment note**: the model used in this app was retrained on 100% of the dataset above after evaluation; metrics reported here come from the held-out 10% evaluation of the corresponding model configuration trained on the 90% development set.
     """)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("XGBoost – Held-out AUC = 0.810")
+st.sidebar.caption("Random Forest – Held-out AUC = 0.869")
