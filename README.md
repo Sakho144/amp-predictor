@@ -1,48 +1,53 @@
 # AMP-Predictor
 
-AMP-Predictor is a Streamlit application that estimates general antimicrobial activity for peptide sequences containing 5–46 standard amino acids. It uses a Random Forest classifier trained with 33 sequence-derived descriptors.
+Research application for predicting general antimicrobial activity from peptide sequences of 5–46 standard amino-acid letters.
 
-## Live application
+Application: https://amp-predictor.streamlit.app/
 
-https://amp-predictor.streamlit.app/
+## Model
 
-## Model and evaluation
+The manuscript model is a Random Forest fitted on 1,178 unique peptides (589 active and 589 inactive), curated from DBAASP and CAMP R4. Active and inactive sequences were length-matched within source. The serialized pipeline contains the fitted StandardScaler and Random Forest together. It uses 33 descriptors and a fixed active-class score threshold of 0.5.
 
-The A9 production model was trained on 1,196 unique peptides (598 active and 598 inactive) after source-controlled curation, exact-length matching, similarity-grouped splitting, model selection, held-out evaluation, and external validation. Within each retained source, active and inactive counts are equal.
+Grouped nested cross-validation gave a mean ROC–AUC of 0.7960 (SD 0.0407) and mean average precision of 0.8108. Pooled out-of-fold counts were TN=435, FP=154, FN=160, TP=429. These describe validation models; fitting the application model on all 1,178 sequences adds no performance estimate. Random Forest did not show a clear advantage over SVM in the paired comparison.
 
-The selected configuration trained on the 1,072-peptide development partition achieved the following results on the 124-peptide held-out set:
+## External evaluation
 
-- ROC AUC: 0.8689
-- Average precision: 0.8570
-- F1-score: 0.7500
-- Accuracy: 0.7581
-- Precision: 0.7759
-- Recall: 0.7258
-- Matthews correlation coefficient: 0.5172
+| Study | Peptides | ROC–AUC | Sensitivity | Specificity |
+| --- | ---: | ---: | ---: | ---: |
+| Jiang 2026 | 20 | 0.828 | 1.000 | 0.500 |
+| Liu 2026 | 9 | 0.650 | 1.000 | 0.200 |
+| Muletz-Wolz 2025 | 8 | 1.000 | 1.000 | 1.000 |
+| Huang 2026, low similarity | 99 | 0.785 | 0.962 | 0.233 |
+| Irvine 2023, low similarity | 15 | 0.804 | 1.000 | 0.286 |
 
-The held-out set shared no exact sequence or similarity group with development data; maximum cross-partition normalized global-alignment similarity was 0.7778.
+Results are study-specific at the unchanged 0.5 threshold. The positive-only ACS analysis detected 40/42 active peptides and cannot estimate specificity or ROC–AUC. Retrospective transfer results are identified separately in the application. These small or specialized datasets do not establish general performance across organisms or peptide chemistries.
 
-External performance varied by source. The model achieved an AUC of 0.7219 on a small 26-peptide DRAMP4 binary cohort, detected 40 of 42 ACS 2026 positives, and detected 5 of 10 recent APD6 positives. These estimates should be interpreted with their reported uncertainty and cohort sizes.
+## Files
 
-## Dataset curation
+- `app.py`: interface, descriptor calculation, similarity search and TreeSHAP explanations.
+- `ANF_random_forest_1178.joblib`: final fitted scaler/classifier pipeline.
+- `ANF_training_peptides_1178.csv`: training sequences, labels and 33 descriptors.
+- `modlamp/`: required modlAMP 4.3.0 components and original license.
+- `requirements.txt`: pinned application dependencies.
+- `RELEASE_MANIFEST.json`: artifact hashes and model identity.
 
-The production dataset combines decisive active and inactive sequences from DBAASP and CAMP_R4. Exact cross-source overlaps, cross-source label conflicts, explicitly annotated CAMP modifications, and mixed-label similarity clusters were excluded. Active and inactive peptides were matched at each exact sequence length separately within each source.
+The ANF filenames are project identifiers for this Random Forest, not a different algorithm. This deployment repository contains the application and its training reference; it is not a complete archive of all manuscript analyses and supplementary materials.
 
-## Repository files
+## Running and deployment
 
-- `app.py`: Streamlit application.
-- `model_random_forest_final_100.pkl`: production Random Forest.
-- `scaler_final_100.pkl`: fitted 33-feature scaler.
-- `peptide_features_source_controlled.csv`: complete source-controlled modeling dataset used for production training and similarity search.
-- `modlamp/`: locally included modlAMP 4.3.0 modules required for descriptor calculation.
-- `THIRD_PARTY_NOTICES.md`: attribution and license information.
-- `requirements.txt`: pinned deployment dependencies.
+Use Python 3.10, install `requirements.txt`, then run `python -m streamlit run app.py`. In Streamlit Community Cloud, select this repository, branch `main`, entry point `app.py` and Python 3.10 in the deployment settings. Check the build logs after pushing. Changing Git alone does not verify successful deployment.
 
-## Interpretation and limitations
+## Interpretation
 
-Predictions indicate general antimicrobial activity and do not identify a target organism or estimate a minimum inhibitory concentration. Similarity categories provide descriptive context and are not calibrated probabilities of correctness. Local feature explanations use TreeSHAP contributions on the active-class probability scale. Predictions require experimental validation.
+Labels use the study's MIC definition at 100 µM. Scores are not calibrated probabilities or MIC estimates and do not identify organism-specific activity. Sequence letters cannot encode terminal modifications or D-amino acids. Global descriptors assume C-terminal amidation at pH 7.4. The normalized alignment score provides sequence context, not prediction confidence. SHAP explains the model score, not biological causation.
 
-## Reference
+## Sources and license notices
 
-- Müller, A. T. et al. modlAMP: Python for antimicrobial peptides. *Bioinformatics* 2017, 33, 2753–2755. https://doi.org/10.1093/bioinformatics/btx285
-- Associated AMP-Predictor article: citation to be added after publication.
+- modlAMP: https://doi.org/10.1093/bioinformatics/btx285
+- Jiang: https://doi.org/10.1038/s41467-026-71145-0
+- Liu: https://doi.org/10.1038/s44386-026-00045-6
+- Muletz-Wolz: https://doi.org/10.1038/s41522-025-00837-0
+- Huang: https://doi.org/10.1038/s41467-026-69306-2
+- Irvine: https://doi.org/10.1371/journal.ppat.1011508
+
+See THIRD_PARTY_NOTICES.md and modlamp/LICENSE for bundled third-party code.

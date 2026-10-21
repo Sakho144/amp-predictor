@@ -1,0 +1,21 @@
+{
+  "model": "Random Forest",
+  "training_sequences": 1178,
+  "threshold": 0.5,
+  "base_commit": "ce7f94b5a6e3794db2413a844b0f611222840cb6",
+  "files_sha256": {
+    ".gitignore": "cb9e469fac560992f6b6bb9144ae86b335cdfaad15e618e9a86618f2047c0d2f",
+    "ANF_random_forest_1178.joblib": "5749879102ea9116615dfb66ecd7df67ebfd1f11807d50d078ec2cf2e3a84c5e",
+    "ANF_training_peptides_1178.csv": "1774c853b19cb472a017c09f241b3c77746d8b609a2af3c22ef133432fb76613",
+    "app.py": "2998c7dfa6193e82b58c6bc97ed3852e9a2ed4097f54e628eb5bae741c003e1d",
+    "README.md": "92404c6484728540285315d69f7a630a02d121086fc6603ec2911fc6ed3ad58c",
+    "requirements.txt": "b3c9038c8938da30c576afcae9829d3ec94f2c76af625333b809a6ea496459d7",
+    "THIRD_PARTY_NOTICES.md": "025449142a613fbf635894efb8f87993550084f680206e419e8b0e010e0ffd49",
+    ".devcontainer/devcontainer.json": "cbd10bb91aa995d360ea2c89d0edf991cfc48985ab67c37e0342920990e8cef9",
+    "modlamp/core.py": "df76cac6fee366131a54e2ca3e609a791646bc2a06bef457b97ce2d0be476b3d",
+    "modlamp/descriptors.py": "a44eaf2d7a73b8e8e4e1c1d04bea9661d7adc27733fc45849fb93a9f06a9d90e",
+    "modlamp/LICENSE": "6f48be5ba4f917e5d708025fb3ca984ee954a6114e580d30ce51e9f8621aa6e0",
+    "modlamp/version.py": "8a1815dbd7f2bd4533f9ed44ffe5ec38f9d313c14d0773471b61caf3433b4c24",
+    "modlamp/__init__.py": "4c403346309aab14ae258507a70a3b3c966e77bb5fc492a93e7625d5154ce74b"
+  }
+}

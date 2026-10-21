@@ -6,6 +6,4 @@ scikit-learn==1.7.2
 joblib==1.5.3
 shap==0.45.0
 matplotlib==3.10.6
-seaborn==0.13.2
-pillow==11.3.0
 biopython==1.85
