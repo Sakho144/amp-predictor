@@ -20,7 +20,7 @@ Grouped nested cross-validation gave a mean ROC–AUC of 0.7960 (SD 0.0407) and 
 | Huang 2026, low similarity | 99 | 0.785 | 0.962 | 0.233 |
 | Irvine 2023, low similarity | 15 | 0.804 | 1.000 | 0.286 |
 
-Results are study-specific at the unchanged 0.5 threshold. The positive-only ACS analysis detected 40/42 active peptides and cannot estimate specificity or ROC–AUC. Retrospective transfer results are identified separately in the application. These small or specialized datasets do not establish general performance across organisms or peptide chemistries.
+Results are study-specific at the unchanged 0.5 threshold. The positive-only Lu et al. (2026) analysis detected 40/42 active peptides and cannot estimate specificity or ROC–AUC. Retrospective transfer results are identified separately in the application. These small or specialized datasets do not establish general performance across organisms or peptide chemistries.
 
 ## Files
 
@@ -49,5 +49,6 @@ Labels use the study's MIC definition at 100 µM. Scores are not calibrated prob
 - Muletz-Wolz: https://doi.org/10.1038/s41522-025-00837-0
 - Huang: https://doi.org/10.1038/s41467-026-69306-2
 - Irvine: https://doi.org/10.1371/journal.ppat.1011508
+- Lu: https://doi.org/10.1021/acsomega.6c01772
 
 See THIRD_PARTY_NOTICES.md and modlamp/LICENSE for bundled third-party code.

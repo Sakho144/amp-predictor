@@ -133,7 +133,7 @@ HYDRO_SCALE = {
     "N": -3.5, "K": -3.9, "R": -4.5,
 }
 def compute_features(sequence: str) -> np.ndarray:
-    sequence = sequence.strip().upper()
+    sequence = "".join(sequence.split()).upper()
     if not 5 <= len(sequence) <= 46:
         raise ValueError(f"Peptide length must be 5–46 residues; received {len(sequence)}.")
     bad = set(sequence) - AMINO_ACIDS
@@ -158,7 +158,7 @@ def load_artifacts():
     model = joblib.load(ROOT / "ANF_random_forest_1178.joblib")
     reference = pd.read_csv(ROOT / "ANF_training_peptides_1178.csv")
     if reference.sequence.nunique() != 1178 or len(reference) != 1178:
-        raise RuntimeError("ANF training reference must contain 1,178 unique peptides")
+        raise RuntimeError("Training reference must contain 1,178 unique peptides")
     if set(reference.activity_label) != {0, 1} or not set(FEATURES) <= set(reference.columns):
         raise RuntimeError("Invalid production reference table")
     if (list(model.named_steps) != ["standardscaler", "randomforestclassifier"] or
@@ -313,7 +313,7 @@ if page == "🏠 Home":
     col3.metric("Accuracy", "0.733")
     col4.metric("Precision", "0.736")
     col5.metric("Recall", "0.728")
-    st.caption("The AUC is the mean of five grouped outer folds. The other values pool their out-of-fold predictions at the fixed 0.5 threshold. The application model was subsequently fitted on all 1,178 peptides and has no separate held-out estimate.")
+    st.caption("ROC–AUC is averaged across five grouped outer validation folds. The other metrics use pooled out-of-fold predictions at a threshold of 0.5.")
 
     st.caption("Results from published peptide studies vary by source. See External validation for the study-by-study results and their limits.")
 
@@ -337,8 +337,8 @@ if page == "🏠 Home":
 
 elif page == "🧪 Prediction":
     st.title("Predict antimicrobial activity")
-    st.markdown("Enter a peptide sequence (5–46 standard amino-acid letters).")
-    sequence = st.text_area("Peptide sequence", height=100).strip().upper()
+    st.markdown("Enter a peptide sequence (5–46 standard amino-acid letters). Spaces and line breaks are ignored.")
+    sequence = "".join(st.text_area("Peptide sequence", height=100).split()).upper()
     amino_acid_guide(key="residue_guide")
 
     if st.button("Predict", type="primary"):
@@ -405,15 +405,23 @@ elif page == "📊 Model performance":
         ("Pooled out-of-fold recall", 0.7284),
         ("Pooled out-of-fold F1-score", 0.7321),
     ], columns=["Metric", "Value"]), hide_index=True)
-    st.caption("Five grouped outer folds were used for model comparison. At the fixed 0.5 threshold, pooled out-of-fold counts were TN=435, FP=154, FN=160, TP=429. The application model was refitted on all 1,178 peptides; it has no separate held-out result.")
+    st.caption("Results use five grouped outer validation folds. At a threshold of 0.5, pooled predictions gave 435 true negatives, 154 false positives, 160 false negatives and 429 true positives.")
 
-    with st.expander("📖 What do these metrics mean?"):
+    with st.expander("📖 Metrics glossary"):
         st.markdown("""
-        - **ROC-AUC** measures discrimination across score thresholds.
-        - **Precision** is the share of predicted actives that were active in the test.
-        - **Recall** is the share of test actives detected at the 50% threshold.
-        - **F1-score** combines precision and recall.
-        - **MCC** summarizes all four confusion-matrix counts (−1 to +1).
+        Here, active and inactive refer to the experimental labels used for evaluation.
+
+        - **ROC–AUC**: ability to rank active peptides above inactive peptides across
+          decision thresholds. A value of 0.5 indicates chance-level ranking and
+          1.0 indicates perfect separation. It is not the percentage of correct predictions.
+        - **Accuracy**: proportion of all evaluated peptides classified correctly.
+        - **Precision**: proportion of peptides predicted active that are labeled active.
+        - **Recall / Sensitivity**: proportion of labeled active peptides detected.
+        - **Specificity**: proportion of labeled inactive peptides correctly classified inactive.
+        - **F1-score**: harmonic mean of precision and recall; high values require both to be high.
+        - **Average precision**: summary of precision across recall levels as the decision
+          threshold varies. Higher values indicate better performance; the proportion of
+          active peptides in the dataset affects its interpretation.
         """)
 
     st.markdown("---")
@@ -429,12 +437,10 @@ elif page == "📊 Model performance":
 
     with st.expander("🔎 Evaluation details", expanded=False):
         st.markdown("""
-        The cross-validation folds kept known similarity, matched-pair and
-        publication groups together. The mean fold ROC-AUC was **0.796**.
-        The older A9 held-out set is not a new blind test of this repaired model.
-        The full-data application model has no independent performance estimate
-        of its own. Results on external studies and their limitations appear in
-        the External validation page.
+        Cross-validation kept related peptide sequences, matched pairs and known
+        publication groups in the same folds. The mean ROC–AUC across the five
+        outer folds was **0.796**. Study-specific external results are presented
+        on the External validation page.
         """)
 
 else:
@@ -444,9 +450,9 @@ else:
     st.caption("The descriptive pooled result for Jiang, Liu and Muletz-Wolz was n=37 (10 active, 27 inactive), ROC-AUC 0.852, sensitivity 10/10 and specificity 15/27. It summarizes those three studies; it is not an additional independent dataset.")
 
     st.markdown("### Positive-only study")
-    st.markdown("**ACS 2026:** 40 of 42 peptides were classified active (sensitivity 95.2%). Because the cohort contains no inactive peptides, ROC-AUC and specificity cannot be estimated.")
+    st.markdown("**Lu et al. (2026):** 40 of 42 peptides were classified active (sensitivity 95.2%). Because the cohort contains no inactive peptides, ROC-AUC and specificity cannot be estimated.")
 
-    with st.expander("Secondary transfer from the earlier SVM data pool", expanded=False):
+    with st.expander("Retrospective transfer analysis", expanded=False):
         st.dataframe(pd.DataFrame([
             ("Exact-novel transfer", 172, 150, 22, 0.778, 0.693, 0.636),
             ("Low similarity, no known shared publication", 107, 92, 15, 0.753, 0.728, 0.467),
@@ -474,6 +480,7 @@ else:
         - [Muletz-Wolz 2025](https://doi.org/10.1038/s41522-025-00837-0)
         - [Huang 2026](https://doi.org/10.1038/s41467-026-69306-2)
         - [Irvine 2023](https://doi.org/10.1371/journal.ppat.1011508)
+        - [Lu 2026](https://doi.org/10.1021/acsomega.6c01772)
         """)
 
 st.sidebar.markdown("---")
